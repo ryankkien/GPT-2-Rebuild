@@ -2,6 +2,39 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import math
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        assert config.n_embd % config.n_head == 0
+        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd)
+        self.c_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.n_head = config.n_head
+        self.n_embd = config.n_embd
+        self.register_buffer('bias', torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size))
+
+    def forward(self, x):
+        B, T, C = x.size()
+        #query key value
+        #queries and keys multiply to get attention scores
+        #attention scores are scaled by 1/sqrt(k.size(-1))
+        #masking is applied to attention scores
+        #softmax is applied to attention scores
+        #values are multiplied by attention scores
+        #output is re-assembled from head outputs
+        #output is projected to n_embd
+        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
+        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs) nh becomes a batch dimension so that future operations can be broadcasted over it
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs) for parallel self attention
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        att = (q @ k.transpose(2, 3)) * (1.0 / math.sqrt(k.size(-1))) #attention scores
+        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))#masking only attends to future tokens
+        att = F.softmax(att, dim=-1)
+        y = att @ v #(B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1, 2).contiguous().view(B, T, C) #re-assemble all head outputs side by side concatenating heads
+        y = self.c_proj(y)
+        return y
 
 class MLP(nn.Module):
     
