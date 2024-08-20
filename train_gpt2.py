@@ -4,6 +4,18 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 class Block(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.ln_1 = nn.LayerNorm(config.n_embd)
+        self.attn = CausalSelfAttention(config)
+        self.ln_2 = nn.LayerNorm(config.n_embd)
+        self.mlp = MLP(config)
+
+    def forward(self, x):
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.mlp(self.ln_2(x))
+        return x #clean residual pathway is optimal, which doesnt happen due to norms
+
 @dataclass
 class GPTConfig: #params
     block_size: int = 256
