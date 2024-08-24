@@ -179,27 +179,53 @@ class GPT(nn.Module):
 num_return = 5
 max_len = 30
 
-
-#prefix tokens
 import tiktoken
-enc = tiktoken.get_encoding('gpt2')
-with open('shakespeare.txt', 'r') as f:
-    text = f.read()
-tokens = enc.encode(text)
-B, T = 4, 32
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-buf = torch.tensor(tokens[:B * T] + [1], device=device)  # Changed this line
-x = buf[:-1].view(B, T)
-y = buf[1:].view(B, T)
 
+class DataLoaderLite:
+    def __init__(self, B, T):
+        self.B = B
+        self.T = T
+
+        with open('shakespeare.txt', 'r') as f:
+            text = f.read()
+        enc = tiktoken.get_encoding('gpt2')
+        self.tokens = enc.encode(text)  # Store tokens as an instance variable
+        print(f'loaded {len(self.tokens)} tokens')
+        print(f'1 epoch has {len(self.tokens) // (B * T)} batches')
+        self.current_position = 0
+    
+    def next_batch(self):
+        B, T = self.B, self.T
+        buf = torch.tensor(self.tokens[self.current_position:self.current_position + B * T + 1], device=device)
+        x, y = buf[:-1].view(B, T), buf[1:].view(B, T)
+        self.current_position += B * T
+
+        if self.current_position + B * T + 1 >= len(self.tokens):
+            self.current_position = 0
+        return x,y
+    
+train_loader = DataLoaderLite(4, 32)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GPT(GPTConfig()) #random model
 #model = GPT.from_pretrained('gpt2')
 model.eval()
 model.to(device)
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
-logits, loss = model(x, y)
-print (loss)
+# logits, loss = model(x, y)
+# print (loss)
+#optimizer
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) #superior to Adam due to bug fix
+
+for i in range(50):
+    x, y = train_loader.next_batch()
+    x, y = x.to(device), y.to(device)
+    optimizer.zero_grad() #zero out the gradients
+    logits, loss = model(x, y)
+    loss.backward() #accumulate the gradients
+    optimizer.step() #update the weights
+    print(f'step {i}: loss {loss.item()}')
+
 import sys; sys.exit()
 
 
@@ -213,7 +239,6 @@ while x.size(1) < max_len:
 for i in x:
     print(enc.decode(i.cpu().tolist()))
     print('\n\n')
-
 
 
 
