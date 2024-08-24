@@ -179,11 +179,6 @@ class GPT(nn.Module):
 num_return = 5
 max_len = 30
 
-model = GPT(GPTConfig()) #random model
-#model = GPT.from_pretrained('gpt2')
-model.eval()
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model.to(device)
 
 #prefix tokens
 import tiktoken
@@ -192,12 +187,22 @@ with open('shakespeare.txt', 'r') as f:
     text = f.read()
 tokens = enc.encode(text)
 B, T = 4, 32
-buf = torch.tensor(tokens[:B * T] + 1)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+buf = torch.tensor(tokens[:B * T] + [1], device=device)  # Changed this line
 x = buf[:-1].view(B, T)
 y = buf[1:].view(B, T)
 
+model = GPT(GPTConfig()) #random model
+#model = GPT.from_pretrained('gpt2')
+model.eval()
+model.to(device)
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
+logits, loss = model(x, y)
+print (loss)
+import sys; sys.exit()
+
+
 while x.size(1) < max_len:
     logits, loss = model(x)
     logits = logits[:, -1, :]
@@ -206,7 +211,7 @@ while x.size(1) < max_len:
     x = torch.cat((x, x_next), dim=1)
 
 for i in x:
-    print(enc.decode(i.tolist()))
+    print(enc.decode(i.cpu().tolist()))
     print('\n\n')
 
 
