@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 # from hellaswag import render_example, iterate_examples
 # -----------------------------------------------------------------------------
 
@@ -211,6 +213,9 @@ model = GPT(GPTConfig()) #random model
 #model = GPT.from_pretrained('gpt2')
 model.eval()
 model.to(device) 
+model = torch.compile(model)
+
+
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
 # logits, loss = model(x, y)
