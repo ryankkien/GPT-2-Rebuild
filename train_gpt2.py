@@ -204,12 +204,13 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
     
-train_loader = DataLoaderLite(4, 32)
+train_loader = DataLoaderLite(8, 1024)
+torch.set_float32_matmul_precision('high')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GPT(GPTConfig()) #random model
 #model = GPT.from_pretrained('gpt2')
 model.eval()
-model.to(device)
+model.to(device) 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
 # logits, loss = model(x, y)
@@ -218,13 +219,19 @@ torch.cuda.manual_seed(42)
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) #superior to Adam due to bug fix
 
 for i in range(50):
+    t0 = time.time()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() #zero out the gradients
-    logits, loss = model(x, y)
+    with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+        logits, loss = model(x, y)
     loss.backward() #accumulate the gradients
     optimizer.step() #update the weights
-    print(f'step {i}: loss {loss.item()}')
+    torch.cuda.synchronize()
+    t1 = time.time()
+    dt = (t1 - t0) * 1000
+    tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
+    print(f'step {i}: loss {loss.item():.4f}, dt {dt:.2f}ms, tok/sec {tokens_per_sec:.2f}')
 
 import sys; sys.exit()
 
