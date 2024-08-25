@@ -209,7 +209,7 @@ class DataLoaderLite:
 train_loader = DataLoaderLite(8, 1024)
 torch.set_float32_matmul_precision('high')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = GPT(GPTConfig()) #random model
+model = GPT(GPTConfig(vocab_size=50304)) #random model
 #model = GPT.from_pretrained('gpt2')
 model.eval()
 model.to(device) 
@@ -221,7 +221,21 @@ torch.cuda.manual_seed(42)
 # logits, loss = model(x, y)
 # print (loss)
 #optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) #superior to Adam due to bug fix
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8) #superior to Adam due to bug fix
+
+max_lr = 3e-4
+min_lr = 3e-5
+warmup_steps = 10
+max_steps = 50
+def get_lr(i):
+    if i < warmup_steps:
+        return max_lr * i / warmup_steps
+    if i > max_steps:
+        return min_lr
+    decay_ratio = (i - warmup_steps) / (max_steps - warmup_steps)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
+    return min_lr + coeff * (max_lr - min_lr)
 
 for i in range(50):
     t0 = time.time()
@@ -231,12 +245,17 @@ for i in range(50):
     with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
         logits, loss = model(x, y)
     loss.backward() #accumulate the gradients
+    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) #max norm of 1.0
+    lr = get_lr(i)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
     optimizer.step() #update the weights
     torch.cuda.synchronize()
     t1 = time.time()
     dt = (t1 - t0) * 1000
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
-    print(f'step {i}: loss {loss.item():.4f}, dt {dt:.2f}ms, tok/sec {tokens_per_sec:.2f}')
+    print(f'step {i}: loss {loss.item():.4f}, norm {norm:.4f}, dt {dt:.2f}ms, tok/sec {tokens_per_sec:.2f}')
+
 
 import sys; sys.exit()
 
