@@ -221,7 +221,7 @@ torch.cuda.manual_seed(42)
 # logits, loss = model(x, y)
 # print (loss)
 #optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8) #superior to Adam due to bug fix
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.1, fused=True) #superior to Adam due to bug fix
 
 max_lr = 3e-4
 min_lr = 3e-5
@@ -254,7 +254,8 @@ for i in range(50):
     t1 = time.time()
     dt = (t1 - t0) * 1000
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
-    print(f'step {i}: loss {loss.item():.4f}, norm {norm:.4f}, dt {dt:.2f}ms, tok/sec {tokens_per_sec:.2f}')
+    print(f'step {i}: loss {loss.item():.4f}, learning rate {lr:.4f}, norm {norm:.4f}, dt {dt:.2f}ms, tok/sec {tokens_per_sec:.2f}')
+
 
 
 import sys; sys.exit()
